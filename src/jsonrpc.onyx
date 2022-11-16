@@ -1,0 +1,215 @@
+package json_rpc
+
+use core
+use runtime.info
+
+// Public structures
+
+Context :: struct {
+    // endpoint.method_name -> endpoint
+    endpoint_map: Map(str, Endpoint);
+
+    // context.thread_id -> method handle status 
+    methods_being_handled: Map(u32, Method_Handle);
+}
+
+Method :: struct {
+    name: str;
+    return_type: type_expr;
+}
+
+
+// Internal structures
+
+#local
+Endpoint :: struct {
+    method_name: str;
+    param_type: type_expr;
+    return_type: type_expr;
+
+    // (^Context, ^param_type) -> ^return_type
+    handler: (^Context, rawptr) -> rawptr;
+}
+
+#local
+Method_Handle :: struct {
+    endpoint: ^Endpoint;
+    w: ^io.Writer;
+    id: json.Value;
+
+    handled := false;
+}
+
+
+
+handler :: () -> Context {
+    s: Context;
+    s.endpoint_map = make(typeof s.endpoint_map);
+    s.methods_being_handled = make(typeof s.methods_being_handled);
+
+    return s;
+}
+
+#inject Context {
+    #doc """
+        Registers a method on the JSON-RPC Server.
+        The parameter and return types are inferred from types on the procedure.
+    """
+    method :: (hndl: ^Context, method_name: str, return_type: type_expr, handler: any) -> bool {
+        handler_info := cast(^Type_Info_Function) get_type_info(handler.type);
+        if handler_info.kind != .Function do return false;
+
+        if handler_info.parameter_types.count != 2 do return false;
+        if handler_info.parameter_types[0] != ^Context do return false;
+
+        param_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
+        if param_type_info.kind != .Pointer do return false;
+
+        m := Endpoint.{
+            method_name = method_name,
+            param_type  = param_type_info.to,
+            return_type = return_type,
+            handler     = *cast(^(^Context, rawptr) -> rawptr) handler.data
+        };
+
+        hndl.endpoint_map[method_name] = m;
+
+        return true;
+    }
+
+    #doc """
+        Automatically registers all methods defined in the set of packages
+        listed in the arguments. If no packages are listed, all methods from all
+        packages are registered.
+    """
+    collect_methods :: (hndl: ^Context, packages: [] package_id) {
+        procs := get_procedures_with_tag(Method);
+
+        for ^ procs {
+            if packages.count == 0 || array.contains(packages, it.pack) {
+                hndl->method(it.tag.name, it.tag.return_type, any.{^it.func, it.type});
+            }
+        }
+    }
+
+    #doc """
+        Handles a JSON-RPC request. This is done SYNCHONOUSLY!
+    """
+    handle :: (hndl: ^Context, request_string: str, response_writer: ^io.Writer) -> bool {
+        request, json_err := json.decode_with_error(request_string);
+        defer json.free(request);
+
+        if json_err->has_error() {
+            pos := json_err->position();
+
+            json.encode(response_writer, json.from_any(^.{
+                code = ERROR_PARSE_ERROR,
+                message = tprintf("{} at line {}, column {}", json_err->message(), pos.line, pos.column)
+            }));
+            return false;
+        }
+
+        request_obj := request.root;
+
+        if request_obj["jsonrpc"]->as_str() != "2.0" {
+            json.encode(response_writer, json.from_any(^.{
+                code = ERROR_INVALID_REQUEST,
+                message = "'jsonrpc' key not found or not equal to '2.0'."
+            }));
+            return false;
+        }
+
+        method := request_obj["method"]->as_str();
+        id     := request_obj["id"];
+
+        if string.empty(method) {
+            json.encode(response_writer, json.from_any(^.{
+                code = ERROR_INVALID_REQUEST,
+                message = "'method' not specified."
+            }));
+            return false;
+        }
+
+        endpoint := ^hndl.endpoint_map[method];
+        if endpoint == null {
+            json.encode(response_writer, json.from_any(^.{
+                code = ERROR_METHOD_NOT_FOUND,
+                message = "method not found."
+            }));
+            return false;
+        }
+
+        params: rawptr = null;
+        defer if params != null do delete(params);
+
+        if !(request_obj["params"]->is_null()) {
+            params = new(endpoint.param_type);
+
+            json.to_any(request_obj["params"], endpoint.param_type, params);
+        }
+
+        hndl.methods_being_handled[context.thread_id] = .{
+            endpoint = endpoint,
+            w = response_writer,
+            id = id
+        };
+
+        endpoint.handler(hndl, params);
+
+        if !hndl.methods_being_handled[context.thread_id].handled && !(id->is_null()) {
+            json.encode(response_writer, json.from_any(^.{
+                jsonrpc = "2.0",
+                result = json.null_value(),
+                id = id
+            }));
+        }
+
+        hndl.methods_being_handled->delete(context.thread_id);
+        return true;
+    }
+
+    respond :: (hndl: ^Context, value: any) -> bool {
+        method_handle := ^hndl.methods_being_handled[context.thread_id];
+
+        result_info := cast(^Type_Info_Pointer) get_type_info(value.type);
+        if result_info.kind != .Pointer do return false;
+
+        // If we are trying to return the wrong type from what
+        // is declared above, error.
+        if method_handle.endpoint.return_type != result_info.to {
+            // TODO: Proper error message here?
+            return false;
+        }
+
+        result := *cast(^rawptr) value.data;
+
+        json_result := json.null_value();
+        if method_handle.endpoint.return_type != void {
+            json_result = json.from_any(method_handle.endpoint.return_type, result);
+        }
+
+        // If the id given is null, do not respond to the request.
+        // In theory, this should never happen as the user-code should
+        // know this, but don't take chances.
+        if !(method_handle.id->is_null()) {
+            json.encode(method_handle.w, json.from_any(^.{
+                jsonrpc = "2.0",
+                result = json_result,
+                id = method_handle.id
+            }));
+        }
+
+        method_handle.handled = true;
+
+        return true;
+    }
+}
+
+
+#local {
+    ERROR_PARSE_ERROR      :: -32700
+    ERROR_INVALID_REQUEST  :: -32600
+    ERROR_METHOD_NOT_FOUND :: -32601
+    ERROR_INVALID_PARAMS   :: -32602
+    ERROR_INTERNAL_ERROR   :: -32603
+}

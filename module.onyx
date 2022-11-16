@@ -1,0 +1,7 @@
+package json_rpc
+
+#if !#defined(package json) {
+    #error "Expected 'json' package to be loaded for json-rpc."
+}
+
+#load_all "./src"

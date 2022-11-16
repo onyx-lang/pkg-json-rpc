@@ -1,0 +1,46 @@
+#load "./lib/json/module"
+#load "./module"
+
+use core
+use json_rpc { JC :: Context, Method }
+
+Input :: struct {
+    param1: str;
+    param2: u32;
+}
+
+Output :: struct {
+    value: u32;
+    desc: str;
+}
+
+@Method.{"test", Output}
+(server: ^JC, input: ^Input) {
+    printf("{*p}\n", input);
+
+    server->respond(^Output.{
+        value = input.param2 * 2,
+        desc = "Double param2"
+    });
+}
+
+main :: () {
+    server := json_rpc.handler();
+
+    server->collect_methods(.[package main]);
+
+    server->handle("""{
+        "jsonrpc": "2.0",
+        "method": "test",
+        "params": { "param1": "Woot!", "param2": 10 },
+        "id": 1
+    }""", ^core.stdio.print_writer);
+
+    server->handle("""{
+        "jsonrpc": "2.0",
+        "method": "test",
+        "params": { "param1": "Some longer test case because why not :)", "param2": 40 },
+        "id": 1
+    }""", ^core.stdio.print_writer);
+}
+
