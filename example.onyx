@@ -18,7 +18,7 @@ Output :: struct {
 (server: ^JC, input: ^Input) {
     printf("{*p}\n", input);
 
-    server->respond(Output.{
+    server->respond(^Output.{
         value = input.param2 * 2,
         desc = "Double param2"
     });
