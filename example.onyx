@@ -15,7 +15,7 @@ Output :: struct {
 }
 
 @Method.{"test"}
-(server: ^JC, input: ^Input, output: ^Output) -> Status {
+(input: ^Input, output: ^Output) -> Status {
     printf("{*p}\n", input);
     
     *output = .{
