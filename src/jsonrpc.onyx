@@ -174,20 +174,18 @@ handler :: () -> Context {
         // If this procedure was passed a pointer to something
         // (likely due to a programmer's optimization), deference
         // it to get the actual value.
-        if get_type_info(value.type).kind == .Pointer {
-            value = core.misc.any_dereference(value);
-        }
+        result := core.misc.any_dereference(value);
 
         // If we are trying to return the wrong type from what
         // is declared above, error.
-        if method_handle.endpoint.return_type != value.type {
+        if method_handle.endpoint.return_type != result.type {
             // TODO: Proper error message here?
             return false;
         }
 
         json_result := json.null_value();
         if method_handle.endpoint.return_type != void {
-            json_result = json.from_any(value.type, value.data);
+            json_result = json.from_any(result.type, result.data);
         }
 
         // If the id given is null, do not respond to the request.
