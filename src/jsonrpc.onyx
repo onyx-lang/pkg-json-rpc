@@ -10,7 +10,7 @@ Context :: struct {
     endpoint_map: Map(str, Endpoint);
 
     // context.thread_id -> method handle status 
-    methods_being_handled: Map(u32, Method_Handle);
+    // methods_being_handled: Map(u32, Method_Handle);
 }
 
 Method :: struct {
@@ -31,21 +31,21 @@ Endpoint :: struct {
     handler: (^Context, rawptr) -> rawptr;
 }
 
-#local
-Method_Handle :: struct {
-    endpoint: ^Endpoint;
-    w: ^io.Writer;
-    id: json.Value;
-
-    handled := false;
-}
+// #local
+// Method_Handle :: struct {
+//     endpoint: ^Endpoint;
+//     w: ^io.Writer;
+//     id: json.Value;
+// 
+//     handled := false;
+// }
 
 
 
 handler :: () -> Context {
     s: Context;
     s.endpoint_map = make(typeof s.endpoint_map);
-    s.methods_being_handled = make(typeof s.methods_being_handled);
+    /// s.methods_being_handled = make(typeof s.methods_being_handled);
 
     return s;
 }
@@ -55,7 +55,7 @@ handler :: () -> Context {
         Registers a method on the JSON-RPC Server.
         The parameter and return types are inferred from types on the procedure.
     """
-    method :: (hndl: ^Context, method_name: str, return_type: type_expr, handler: any) -> bool {
+    method :: (hndl: ^Context, method_name: str, handler: any) -> bool {
         handler_info := cast(^Type_Info_Function) get_type_info(handler.type);
         if handler_info.kind != .Function do return false;
 
@@ -65,10 +65,13 @@ handler :: () -> Context {
         param_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
         if param_type_info.kind != .Pointer do return false;
 
+        return_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.return_type);
+        if return_type_info.kind != .Pointer do return false;
+
         m := Endpoint.{
             method_name = method_name,
             param_type  = param_type_info.to,
-            return_type = return_type,
+            return_type = return_type_info.to,
             handler     = *cast(^(^Context, rawptr) -> rawptr) handler.data
         };
 
@@ -87,7 +90,7 @@ handler :: () -> Context {
 
         for ^ procs {
             if packages.count == 0 || array.contains(packages, it.pack) {
-                hndl->method(it.tag.name, it.tag.return_type, any.{^it.func, it.type});
+                hndl->method(it.tag.name, any.{^it.func, it.type});
             }
         }
     }
@@ -148,26 +151,50 @@ handler :: () -> Context {
             json.to_any(request_obj["params"], endpoint.param_type, params);
         }
 
-        hndl.methods_being_handled[context.thread_id] = .{
-            endpoint = endpoint,
-            w = response_writer,
-            id = id
-        };
+//         hndl.methods_being_handled[context.thread_id] = .{
+//             endpoint = endpoint,
+//             w = response_writer,
+//             id = id
+//         };
 
-        endpoint.handler(hndl, params);
+        // if !hndl.methods_being_handled[context.thread_id].handled && !(id->is_null()) {
+        //     json.encode(response_writer, json.from_any(^.{
+        //         jsonrpc = "2.0",
+        //         result = json.null_value(),
+        //         id = id
+        //     }));
+        // }
 
-        if !hndl.methods_being_handled[context.thread_id].handled && !(id->is_null()) {
+        result := endpoint.handler(hndl, params);
+
+        json_result := json.null_value();
+        if endpoint.return_type != void {
+            json_result = json.from_any(endpoint.return_type, result);
+        }
+
+        // If the id given is null, do not respond to the request.
+        // In theory, this should never happen as the user-code should
+        // know this, but don't take chances.
+        if !(id->is_null()) {
             json.encode(response_writer, json.from_any(^.{
                 jsonrpc = "2.0",
-                result = json.null_value(),
+                result = json_result,
                 id = id
             }));
         }
 
-        hndl.methods_being_handled->delete(context.thread_id);
+        // hndl.methods_being_handled->delete(context.thread_id);
         return true;
     }
 
+    // Does this need to be on the context?
+    return_temp :: macro (ctx: ^Context, value: $T) {
+        v := make_temp(T);
+        *v = value;
+        return v;
+    }
+
+    /*
     respond :: (hndl: ^Context, value: any) -> bool {
         method_handle := ^hndl.methods_being_handled[context.thread_id];
 
@@ -205,6 +232,7 @@ handler :: () -> Context {
 
         return true;
     }
+    */
 }
 
 
