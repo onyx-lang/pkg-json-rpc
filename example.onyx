@@ -14,11 +14,11 @@ Output :: struct {
     desc: str;
 }
 
-@Method.{"test"}
-(server: ^JC, input: ^Input) -> ^Output {
+@Method.{"test", Output}
+(server: ^JC, input: ^Input) {
     printf("{*p}\n", input);
 
-    server->return_temp(Output.{
+    server->respond(^Output.{
         value = input.param2 * 2,
         desc = "Double param2"
     });
