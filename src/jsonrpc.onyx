@@ -171,21 +171,23 @@ handler :: () -> Context {
     respond :: (hndl: ^Context, value: any) -> bool {
         method_handle := ^hndl.methods_being_handled[context.thread_id];
 
-        result_info := cast(^Type_Info_Pointer) get_type_info(value.type);
-        if result_info.kind != .Pointer do return false;
+        // If this procedure was passed a pointer to something
+        // (likely due to a programmer's optimization), deference
+        // it to get the actual value.
+        if get_type_info(value.type).kind == .Pointer {
+            value = core.misc.any_dereference(value);
+        }
 
         // If we are trying to return the wrong type from what
         // is declared above, error.
-        if method_handle.endpoint.return_type != result_info.to {
+        if method_handle.endpoint.return_type != value.type {
             // TODO: Proper error message here?
             return false;
         }
 
-        result := *cast(^rawptr) value.data;
-
         json_result := json.null_value();
         if method_handle.endpoint.return_type != void {
-            json_result = json.from_any(method_handle.endpoint.return_type, result);
+            json_result = json.from_any(value.type, value.data);
         }
 
         // If the id given is null, do not respond to the request.
