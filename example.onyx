@@ -2,7 +2,7 @@
 #load "./module"
 
 use core
-use json_rpc { JC :: Context, Method }
+use json_rpc { JC :: Context, Method, Status }
 
 Input :: struct {
     param1: str;
@@ -14,14 +14,16 @@ Output :: struct {
     desc: str;
 }
 
-@Method.{"test", Output}
-(server: ^JC, input: ^Input) {
+@Method.{"test"}
+(server: ^JC, input: ^Input, output: ^Output) -> Status {
     printf("{*p}\n", input);
-
-    server->respond(^Output.{
+    
+    *output = .{
         value = input.param2 * 2,
         desc = "Double param2"
-    });
+    };
+
+    return .Success;
 }
 
 main :: () {
