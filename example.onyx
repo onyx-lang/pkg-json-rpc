@@ -5,7 +5,9 @@ use core
 use json_rpc { JC :: Context, Method, Status }
 
 Input :: struct {
+    @json_rpc.Param_Description.{"Dummy description"}
     param1: str;
+    @json_rpc.Param_Summary.{"Dummy summary"}
     param2: u32;
 }
 
@@ -14,7 +16,11 @@ Output :: struct {
     desc: str;
 }
 
-@Method.{"test"}
+@Method.{
+    "test",
+    summary = "A simple test method.",
+    description = "A long description of what is said before"
+}
 (_: ^JC, input: ^Input, output: ^Output) -> Status {
     printf("{*p}\n", input);
     

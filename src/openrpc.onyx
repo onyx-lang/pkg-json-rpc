@@ -1,6 +1,7 @@
 package json_rpc
 
-use core {iter}
+use core {iter, array}
+use core.misc {any_as}
 use runtime.info
 
 #inject Context {
@@ -8,6 +9,9 @@ use runtime.info
         ctx->method("rpc.discover", openrpc_discover_handler);
     }
 }
+
+Param_Summary     :: struct { summary: str }
+Param_Description :: struct { desc: str }
 
 
 //
@@ -41,8 +45,8 @@ openrpc_discover_handler :: (
         m := ^out.methods[entry.index];
         *m = .{};
         m.name = endpoint.method_name;
-        m.summary = ""; // :user-config
-        m.description = ""; // :user-config
+        m.summary = endpoint.summary;
+        m.description = endpoint.description;
         
         if endpoint.param_type != void
         {
@@ -54,9 +58,28 @@ openrpc_discover_handler :: (
                 s_info := cast(^Type_Info_Struct) p_info;
                 for ^ member: s_info.members
                 {
+                    desc := do {
+                        if tag := array.first(member.tags, #(it.type == Param_Description)); tag {
+                            return any_as(*tag, Param_Description).desc;
+                        }
+
+                        return "";
+                    };
+
+                    summary := do {
+                        if tag := array.first(member.tags, #(it.type == Param_Summary)); tag {
+                            return any_as(*tag, Param_Summary).summary;
+                        }
+
+                        return "";
+                    };
+
                     params << .{
                         name = member.name,
                         schema = build_schema_for_type(member.type),
+                        required = true,
+                        summary = summary,
+                        description = desc,
                     };
                 }
             }
@@ -64,7 +87,8 @@ openrpc_discover_handler :: (
             {
                 params << .{
                     name = "unnamed",
-                    schema = build_schema_for_type(endpoint.param_type)
+                    schema = build_schema_for_type(endpoint.param_type),
+                    required = true,
                 };
             }
 
@@ -73,7 +97,8 @@ openrpc_discover_handler :: (
 
         m.result = .{
             name = "result",
-            schema = build_schema_for_type(endpoint.return_type)
+            schema = build_schema_for_type(endpoint.return_type),
+            required = true
         };
     }
 }
