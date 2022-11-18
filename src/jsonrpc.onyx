@@ -166,8 +166,7 @@ handler :: () -> Context {
 
         if !(request_obj["params"]->is_null()) {
             params = new(endpoint.param_type);
-
-            json.to_any(request_obj["params"], endpoint.param_type, params);
+            populate_parameters(params, endpoint.param_type, request_obj["params"]);
         }
 
         result = new(endpoint.return_type);
@@ -208,6 +207,24 @@ handler :: () -> Context {
             json.encode(response_writer, json.from_any(^result));
             return false;
         }
+    }
+}
+
+#local
+populate_parameters :: (params: rawptr, param_type: type_expr, input: json.Value) {
+    p_info := get_type_info(param_type);
+
+    if input->type() == .Array && p_info.kind == .Struct {
+        s_info := cast(^Type_Info_Struct) p_info;
+
+        i := 0;
+        for ^ member: s_info.members {
+            json.to_any(input[i], member.type, cast(^u8) params + member.offset);
+            i += 1;
+        }
+
+    } else {
+        json.to_any(input, param_type, params);
     }
 }
 

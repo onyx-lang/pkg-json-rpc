@@ -39,26 +39,26 @@ main :: () {
     server->collect_methods(.[package main]);
     server->enable_openrpc_discovery();
 
-    // server->handle("""{
-    //     "jsonrpc": "2.0",
-    //     "method": "test",
-    //     "params": { "param1": "Woot!", "param2": 10 },
-    //     "id": 1
-    // }""", ^core.stdio.print_writer);
-
-    // server->handle("""{
-    //     "jsonrpc": "2.0",
-    //     "method": "test",
-    //     "params": { "param1": "Some longer test case because why not :)", "param2": 40 },
-    //     "id": 1
-    // }""", ^core.stdio.print_writer);
-    
     server->handle("""{
         "jsonrpc": "2.0",
-        "method": "rpc.discover",
-        "params": [],
+        "method": "test",
+        "params": { "param1": "Woot!", "param2": 10 },
         "id": 1
     }""", ^core.stdio.print_writer);
+
+    server->handle("""{
+        "jsonrpc": "2.0",
+        "method": "test",
+        "params": [ "Some longer test case because why not :)", 40 ],
+        "id": 1
+    }""", ^core.stdio.print_writer);
+    
+    // server->handle("""{
+    //     "jsonrpc": "2.0",
+    //     "method": "rpc.discover",
+    //     "params": [],
+    //     "id": 1
+    // }""", ^core.stdio.print_writer);
 
 }
 
