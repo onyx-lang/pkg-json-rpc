@@ -1,0 +1,210 @@
+package json_rpc
+
+use core {iter}
+use runtime.info
+
+#inject Context {
+    enable_openrpc_discovery :: (ctx: ^Context) {
+        ctx->method("rpc.discover", openrpc_discover_handler);
+    }
+}
+
+
+//
+// CLEANUP: This procedure allocates A LOT of memory for all of
+// the JSON schema used. This is not optimal, but what is even
+// less optimal is that there is no way to free any of it, because
+// it has to live past the end of this function... The only good
+// solution (that is hopefully in place when using json-rpc), is
+// a per-request garbage collected allocator. Then all the trash
+// will be picked up, but it will be a lot of GC... :(
+#local
+openrpc_discover_handler :: (
+    ctx: ^Context,
+    in: ^void,
+    out: ^OpenRPC_Spec)
+-> Status
+{
+    // Fill out basic information
+    // This should be :user-configurable
+    out.info.title = ctx.title;
+    out.info.description = ctx.description;
+    out.info.version = ctx.version;
+
+    // Populate the methods (The important part!)
+    out.methods = make([] OpenRPC_Method, ctx.endpoint_map.entries.count);
+    for entry: iter.as_iterator(^ctx.endpoint_map)
+            |> iter.enumerate()
+    {
+        endpoint := ^entry.value.value;
+
+        m := ^out.methods[entry.index];
+        *m = .{};
+        m.name = endpoint.method_name;
+        m.summary = ""; // :user-config
+        m.description = ""; // :user-config
+        
+        if endpoint.param_type != void
+        {
+            params := make([..] OpenRPC_Content_Desc);
+            p_info := get_type_info(endpoint.param_type); 
+
+            if p_info.kind == .Struct
+            {
+                s_info := cast(^Type_Info_Struct) p_info;
+                for ^ member: s_info.members
+                {
+                    params << .{
+                        name = member.name,
+                        schema = build_schema_for_type(member.type),
+                    };
+                }
+            }
+            else
+            {
+                params << .{
+                    name = "unnamed",
+                    schema = build_schema_for_type(endpoint.param_type)
+                };
+            }
+
+            m.params = params;
+        }
+
+        m.result = .{
+            name = "result",
+            schema = build_schema_for_type(endpoint.return_type)
+        };
+    }
+}
+
+#local
+build_schema_for_type :: (type: type_expr) -> json.Value
+{
+    t_info := get_type_info(type);
+    switch t_info.kind
+    {
+        case .Basic do switch type
+        {
+            case bool      do return json.from_any(^Basic_Schema.{ "boolean" });
+            case u32, i32,
+                 u64, i64  do return json.from_any(^Basic_Schema.{ "integer" });
+
+            case f32, f64  do return json.from_any(^Basic_Schema.{ "number" });
+
+            case #default  do return json.from_any(^Basic_Schema.{ "null" });
+        }
+
+        case .Array
+        {
+            a_info := cast(^Type_Info_Array) t_info;
+            return json.from_any(^.{
+                type  = "array",
+                items = build_schema_for_type(a_info.of),
+                minItems = a_info.count,
+                maxItems = a_info.count,
+            });
+        }
+
+        case .Slice
+        {
+            if type == str {
+                return json.from_any(^Basic_Schema.{ "string" }); 
+            }
+            
+            s_info := cast(^Type_Info_Slice) t_info;
+            return json.from_any(^.{
+                type = "array",
+                items = build_schema_for_type(s_info.of),
+            });
+        }
+
+        case .Dynamic_Array
+        {
+            a_info := cast(^Type_Info_Dynamic_Array) t_info;
+            return json.from_any(^.{
+                type = "array",
+                items = build_schema_for_type(a_info.of),
+            });
+        }
+
+        case .Struct
+        {
+            out := json.empty_object();
+            s_info := cast(^Type_Info_Struct) t_info;
+            for ^ member: s_info.members
+            {
+                json.set(out, member.name, build_schema_for_type(member.type), key_is_static=true);
+            }
+
+            return json.from_any(^.{
+                type = "object",
+                properties = out
+            });
+        }
+    }
+
+    return json.empty_object();
+}
+
+#local Basic_Schema :: struct { type: str }
+
+
+#local {
+    OpenRPC_Spec :: struct {
+        openrpc: str = "1.2.6";
+
+        info: OpenRPC_Info;
+        servers: [] OpenRPC_Server;
+        methods: [] OpenRPC_Method;
+    }
+
+    OpenRPC_Info :: struct {
+        title: str;
+        description: str;
+        version: str;
+    }
+
+    OpenRPC_Server :: struct {
+        name: str;
+        url: str;
+        summary: str;
+        description: str;
+    }
+
+    OpenRPC_Method :: struct {
+        name: str;
+        tags: [] OpenRPC_Tag;
+        summary: str;
+        description: str;
+        // externalDocs: [] OpenRPC_External_Doc;
+        params: [] OpenRPC_Content_Desc;
+        result: OpenRPC_Content_Desc;
+        deprecated: bool;
+        errors: [] OpenRPC_Error;
+        // links: [] OpenRPC_Link;
+    }
+
+    OpenRPC_Tag :: struct {
+        name: str;
+        summary: str;
+        description: str;
+        // externalDocs: [] OpenRPC_External_Doc;
+    }
+
+    OpenRPC_Content_Desc :: struct {
+        name: str;
+        summary: str;
+        description: str;
+        required: bool;
+        schema: json.Value;
+        deprecated: bool;
+    }
+    
+    OpenRPC_Error :: struct {
+        code: i32;
+        message: str;
+    }
+}
+
+
