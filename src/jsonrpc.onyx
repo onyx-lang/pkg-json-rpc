@@ -24,6 +24,7 @@ Method :: struct {
     summary := "";
     description := "";
     deprecated := false;
+    protected := false;
 }
 
 Status :: enum {
@@ -44,6 +45,7 @@ Endpoint :: struct {
     handler: (^Context, rawptr, rawptr) -> Status;
 
     summary, description: str;
+    protected := false;
 }
 
 
@@ -118,6 +120,7 @@ handler :: () -> Context {
                     endpoint := ^hndl.endpoint_map[it.tag.name];
                     endpoint.summary = it.tag.summary;
                     endpoint.description = it.tag.description;
+                    endpoint.protected = it.tag.protected;
                 }
             }
         }
@@ -126,7 +129,7 @@ handler :: () -> Context {
     #doc """
         Handles a JSON-RPC request. This is done SYNCHONOUSLY!
     """
-    handle :: (hndl: ^Context, request_string: str, response_writer: ^io.Writer) -> bool {
+    handle :: (hndl: ^Context, request_string: str, response_writer: ^io.Writer, protected := false) -> bool {
         request, json_err := json.decode_with_error(request_string);
         defer json.free(request);
 
@@ -151,6 +154,10 @@ handler :: () -> Context {
         endpoint := ^hndl.endpoint_map[method];
         if endpoint == null {
             respond_with_error(ERROR_METHOD_NOT_FOUND, "method not found.");
+        }
+
+        if endpoint.protected && !protected {
+            respond_with_error(ERROR_INVALID_REQUEST, "unauthorized.");
         }
 
         // There is a weird compiler bug (feature?) that causes
