@@ -27,6 +27,12 @@ Method :: struct {
     protected := false;
 }
 
+Notification :: struct {
+    name: str;
+    summary := "";
+    description := "";
+}
+
 Status :: enum {
     Success;
     Error;
@@ -37,12 +43,20 @@ Status :: enum {
 
 #local
 Endpoint :: struct {
+    Type :: enum { Notification; Method; }
+    type: Type;
+
     method_name: str;
     param_type: type_expr;
     return_type: type_expr;
 
-    // (^Context, ^param_type, ^return_type) -> Status
-    handler: (^Context, rawptr, rawptr) -> Status;
+    use _: struct #union {
+        // (^Context, ^param_type, ^return_type) -> Status
+        method_handler: (^Context, rawptr, rawptr) -> Status;
+
+        // (^Context, ^param_type) -> void
+        notification_handler: (^Context, rawptr) -> void;
+    };
 
     summary, description: str;
     protected := false;
@@ -95,11 +109,41 @@ handler :: () -> Context {
         if return_type_info.kind != .Pointer do return false;
 
         m := Endpoint.{
+            type = .Method,
             method_name = method_name,
             param_type  = param_type_info.to,
             return_type = return_type_info.to,
-            handler     = *cast(^(^Context, rawptr, rawptr) -> Status) handler.data
         };
+
+        m.method_handler = *cast(^(^Context, rawptr, rawptr) -> Status) handler.data;
+
+        hndl.endpoint_map[method_name] = m;
+
+        return true;
+    }
+
+    #doc """
+        Registers a notification handler on the JSON-RPC Server.
+        The parameter type is inferred from type on the procedure.
+    """
+    notification :: (hndl: ^Context, method_name: str, handler: any) -> bool {
+        handler_info := cast(^Type_Info_Function) get_type_info(handler.type);
+        if handler_info.kind != .Function do return false;
+
+        if handler_info.parameter_types.count != 2 do return false;
+        if handler_info.parameter_types[0] != ^Context do return false;
+
+        param_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
+        if param_type_info.kind != .Pointer do return false;
+
+        m := Endpoint.{
+            type = .Method,
+            method_name = method_name,
+            param_type  = param_type_info.to,
+            return_type = void
+        };
+
+        m.notification_handler = *cast(^(^Context, rawptr) -> void) handler.data;
 
         hndl.endpoint_map[method_name] = m;
 
@@ -121,6 +165,18 @@ handler :: () -> Context {
                     endpoint.summary = it.tag.summary;
                     endpoint.description = it.tag.description;
                     endpoint.protected = it.tag.protected;
+                }
+            }
+        }
+
+        notification_procs := get_procedures_with_tag(Notification);
+
+        for ^ notification_procs {
+            if packages.count == 0 || array.contains(packages, it.pack) {
+                if hndl->notification(it.tag.name, any.{^it.func, it.type}) {
+                    endpoint := ^hndl.endpoint_map[it.tag.name];
+                    endpoint.summary = it.tag.summary;
+                    endpoint.description = it.tag.description;
                 }
             }
         }
@@ -176,43 +232,56 @@ handler :: () -> Context {
             populate_parameters(params, endpoint.param_type, request_obj["params"]);
         }
 
-        result = new(endpoint.return_type);
+        switch endpoint.type {
+            case .Method {
+                result = new(endpoint.return_type);
 
-        status := endpoint.handler(hndl, params, result);
+                status := endpoint.method_handler(hndl, params, result);
 
-        // If no id was given, no response should be generated.
-        if id->is_null() {
-            return true;
+                // If no id was given, no response should be generated.
+                if id->is_null() {
+                    return true;
+                }
+
+                json_result := json.null_value();
+                if endpoint.return_type != void {
+                    json_result = json.from_any(endpoint.return_type, result);
+                }
+
+                if status == .Success {
+                    json.encode(response_writer, json.from_any(^.{
+                        jsonrpc = "2.0",
+                        result = json_result,
+                        id = id
+                    }));
+
+                } else {
+                    respond_with_error(ERROR_INTERNAL_ERROR, "error processing request");
+                }
+
+                json.free(json_result, context.allocator);
+                return true;
+            }
+
+            case .Notification {
+                endpoint.notification_handler(hndl, params);
+                return true;
+            }
         }
 
-        json_result := json.null_value();
-        if endpoint.return_type != void {
-            json_result = json.from_any(endpoint.return_type, result);
-        }
-
-        if status == .Success {
-            json.encode(response_writer, json.from_any(^.{
-                jsonrpc = "2.0",
-                result = json_result,
-                id = id
-            }));
-
-        } else {
-            respond_with_error(ERROR_INTERNAL_ERROR, "error processing request");
-        }
-
-        json.free(json_result, context.allocator);
-        return true;
+        return false;
 
         respond_with_error :: macro (code: i32, message: str) {
-            result := .{
-                jsonrpc = "2.0",
-                error = Error_Status.{ code = code, message = message },
-                id = id
-            };
+            if !(id->is_null()) {
+                result := .{
+                    jsonrpc = "2.0",
+                    error = Error_Status.{ code = code, message = message },
+                    id = id
+                };
 
-            json.encode(response_writer, json.from_any(^result));
-            return false;
+                json.encode(response_writer, json.from_any(^result));
+                return false;
+            }
         }
     }
 }

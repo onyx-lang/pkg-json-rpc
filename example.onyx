@@ -2,7 +2,7 @@
 #load "./module"
 
 use core
-use json_rpc { JC :: Context, Method, Status }
+use json_rpc { JC :: Context, Method, Status, Notification }
 
 Input :: struct {
     @json_rpc.Param_Description.{"Dummy description"}
@@ -32,6 +32,13 @@ Output :: struct {
     return .Success;
 }
 
+@Notification.{
+    "notify"
+}
+(_: ^JC, test: ^i32) {
+    printf("Working notification: {*}\n", test);
+}
+
 main :: () {
     server := json_rpc.handler();
 
@@ -51,6 +58,12 @@ main :: () {
         "method": "test",
         "params": [ "Some longer test case because why not :)", 40 ],
         "id": 1
+    }""", ^core.stdio.print_writer);
+
+    server->handle("""{
+        "jsonrpc": "2.0",
+        "method": "notify",
+        "params": [1234],
     }""", ^core.stdio.print_writer);
     
     // server->handle("""{
