@@ -17,6 +17,8 @@ Context :: struct {
     title: str;
     description: str;
     version: str;
+
+    output_writer: ^io.Writer;
 }
 
 Method :: struct {
@@ -50,13 +52,11 @@ Endpoint :: struct {
     param_type: type_expr;
     return_type: type_expr;
 
-    use _: struct #union {
-        // (^Context, ^param_type, ^return_type) -> Status
-        method_handler: (^Context, rawptr, rawptr) -> Status;
+    // (^Context, ^param_type, ^return_type) -> Status
+    method_handler: (^Context, rawptr, rawptr) -> Status;
 
-        // (^Context, ^param_type) -> void
-        notification_handler: (^Context, rawptr) -> void;
-    };
+    // (^Context, ^param_type) -> void
+    notification_handler: (^Context, rawptr) -> void;
 
     summary, description: str;
     protected := false;
@@ -137,7 +137,7 @@ handler :: () -> Context {
         if param_type_info.kind != .Pointer do return false;
 
         m := Endpoint.{
-            type = .Method,
+            type = .Notification,
             method_name = method_name,
             param_type  = param_type_info.to,
             return_type = void
@@ -183,9 +183,17 @@ handler :: () -> Context {
     }
 
     #doc """
+        Sets the writer to be used for responding to a request and/or
+        sending a notification.
+    """
+    set_writer :: (hndl: ^Context, w: ^io.Writer) {
+        hndl.output_writer = w;
+    }
+
+    #doc """
         Handles a JSON-RPC request. This is done SYNCHONOUSLY!
     """
-    handle :: (hndl: ^Context, request_string: str, response_writer: ^io.Writer, protected := false) -> bool {
+    handle :: (hndl: ^Context, request_string: str, protected := false) -> bool {
         request, json_err := json.decode_with_error(request_string);
         defer json.free(request);
 
@@ -249,7 +257,7 @@ handler :: () -> Context {
                 }
 
                 if status == .Success {
-                    json.encode(response_writer, json.from_any(^.{
+                    json.encode(hndl.output_writer, json.from_any(^.{
                         jsonrpc = "2.0",
                         result = json_result,
                         id = id
@@ -279,10 +287,19 @@ handler :: () -> Context {
                     id = id
                 };
 
-                json.encode(response_writer, json.from_any(^result));
-                return false;
+                json.encode(hndl.output_writer, json.from_any(^result));
             }
+            return false;
         }
+    }
+
+    send_notification :: (hndl: ^Context, name: str, params: ^$T) {
+        msg := .{
+            jsonrpc = "2.0",
+            method = name,
+            params = *params,
+        };
+        json.encode(hndl.output_writer, json.from_any(^msg));
     }
 }
 
