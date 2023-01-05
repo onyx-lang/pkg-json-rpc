@@ -18,7 +18,8 @@ Context :: struct {
     description: str;
     version: str;
 
-    output_writer: ^io.Writer;
+    output_callback_userdata: rawptr;
+    output_callback: (rawptr, str) -> void;
 }
 
 Method :: struct {
@@ -183,11 +184,11 @@ handler :: () -> Context {
     }
 
     #doc """
-        Sets the writer to be used for responding to a request and/or
-        sending a notification.
+        TODO Document
     """
-    set_writer :: (hndl: ^Context, w: ^io.Writer) {
-        hndl.output_writer = w;
+    set_output_callback :: (hndl: ^Context, userdata: rawptr, callback: (rawptr, str) -> void) {
+        hndl.output_callback_userdata = userdata;
+        hndl.output_callback = callback;
     }
 
     #doc """
@@ -199,7 +200,7 @@ handler :: () -> Context {
 
         request_obj := request.root;
         method := request_obj["method"]->as_str();
-        id     := request_obj["id"];
+        id     := request_obj["id"]->as_int();
 
         if json_err->has_error() {
             pos := json_err->position();
@@ -247,7 +248,7 @@ handler :: () -> Context {
                 status := endpoint.method_handler(hndl, params, result);
 
                 // If no id was given, no response should be generated.
-                if id->is_null() {
+                if id == 0 {
                     return true;
                 }
 
@@ -257,17 +258,22 @@ handler :: () -> Context {
                 }
 
                 if status == .Success {
-                    json.encode(hndl.output_writer, json.from_any(^.{
+                    message_json := json.from_any(^.{
                         jsonrpc = "2.0",
                         result = json_result,
                         id = id
-                    }));
+                    });
+                    defer json.free(message_json, context.allocator);
+
+                    message, asdf := json.encode_string(message_json);
+                    defer delete(^message);
+
+                    hndl.output_callback(hndl.output_callback_userdata, message);
 
                 } else {
                     respond_with_error(ERROR_INTERNAL_ERROR, "error processing request");
                 }
 
-                json.free(json_result, context.allocator);
                 return true;
             }
 
@@ -280,26 +286,35 @@ handler :: () -> Context {
         return false;
 
         respond_with_error :: macro (code: i32, message: str) {
-            if !(id->is_null()) {
-                result := .{
+            if id != 0 {
+                result_json := json.from_any(^.{
                     jsonrpc = "2.0",
                     error = Error_Status.{ code = code, message = message },
                     id = id
-                };
+                });
+                defer json.free(result_json, context.allocator);
 
-                json.encode(hndl.output_writer, json.from_any(^result));
+                result, _ := json.encode_string(result_json);
+                defer delete(^result);
+
+                hndl.output_callback(hndl.output_callback_userdata, result);
             }
             return false;
         }
     }
 
     send_notification :: (hndl: ^Context, name: str, params: ^$T) {
-        msg := .{
+        message_json := json.from_any(^.{
             jsonrpc = "2.0",
             method = name,
-            params = *params,
-        };
-        json.encode(hndl.output_writer, json.from_any(^msg));
+            params = *params
+        });
+        defer json.free(message_json, context.allocator);
+
+        message, _ := json.encode_string(message_json);
+        defer delete(^message);
+
+        hndl.output_callback(hndl.output_callback_userdata, message);
     }
 }
 

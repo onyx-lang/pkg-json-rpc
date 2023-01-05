@@ -46,7 +46,9 @@ main :: () {
     server->collect_methods(.[package main]);
     server->enable_openrpc_discovery();
 
-    server->set_writer(^core.stdio.print_writer);
+    server->set_output_callback(null, (_, msg) => {
+        println(msg);
+    });
 
     server->handle("""{
         "jsonrpc": "2.0",
