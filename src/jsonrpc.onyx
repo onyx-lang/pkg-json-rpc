@@ -208,6 +208,10 @@ handler :: () -> Context {
             respond_with_error(ERROR_PARSE_ERROR, tprintf("{} at line {}, column {}", json_err->message(), pos.line, pos.column));
         }
 
+        if request_obj["id"]->is_null() {
+            id = -1;
+        }
+
         if request_obj["jsonrpc"]->as_str() != "2.0" {
             respond_with_error(ERROR_INVALID_REQUEST, "'jsonrpc' key not found or not equal to '2.0'.");
         }
@@ -248,7 +252,7 @@ handler :: () -> Context {
                 status := endpoint.method_handler(hndl, params, result);
 
                 // If no id was given, no response should be generated.
-                if id == 0 {
+                if id == -1 {
                     return true;
                 }
 
@@ -286,7 +290,7 @@ handler :: () -> Context {
         return false;
 
         respond_with_error :: macro (code: i32, message: str) {
-            if id != 0 {
+            if id != -1 {
                 result_json := json.from_any(^.{
                     jsonrpc = "2.0",
                     error = Error_Status.{ code = code, message = message },
