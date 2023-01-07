@@ -37,7 +37,7 @@ openrpc_discover_handler :: (
 
     // Populate the methods (The important part!)
     out.methods = make([] OpenRPC_Method, ctx.endpoint_map.entries.count);
-    for entry: iter.as_iterator(^ctx.endpoint_map)
+    for entry: iter.as_iter(^ctx.endpoint_map)
             |> iter.enumerate()
     {
         endpoint := ^entry.value.value;
