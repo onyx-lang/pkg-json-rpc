@@ -270,7 +270,7 @@ handler :: () -> Context {
                     json_result = json.from_any(endpoint.return_type, result);
                 }
 
-                if status == .Success {
+                if status != .Error {
                     message_json := json.from_any(^.{
                         jsonrpc = "2.0",
                         result = json_result,
