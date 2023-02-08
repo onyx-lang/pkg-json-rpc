@@ -37,8 +37,17 @@ Notification :: struct {
 }
 
 Status :: enum {
+    // Returns the value as specified in the method handler.
     Success;
+
+    // Returns an error code. Currently not controllable, but
+    // that is an improvement that will be coming.
     Error;
+
+    // Returns a successful response, but does not include the
+    // value. Generally used by APIs for "soft" failures, or
+    // "no result found".
+    Return_Null;
 }
 
 
@@ -257,7 +266,7 @@ handler :: () -> Context {
                 }
 
                 json_result := json.null_value();
-                if endpoint.return_type != void {
+                if endpoint.return_type != void && status == .Success {
                     json_result = json.from_any(endpoint.return_type, result);
                 }
 
