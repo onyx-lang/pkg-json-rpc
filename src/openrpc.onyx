@@ -159,7 +159,7 @@ build_schema_for_type :: (type: type_expr) -> json.Value
             s_info := cast(^Type_Info_Struct) t_info;
             for ^ member: s_info.members
             {
-                json.set(out, member.name, build_schema_for_type(member.type), key_is_static=true);
+                json.set(out, member.name, build_schema_for_type(member.type), dony_copy_key=true);
             }
 
             return json.from_any(^.{
