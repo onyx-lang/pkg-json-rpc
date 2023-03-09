@@ -238,16 +238,10 @@ handler :: () -> Context {
             respond_with_error(ERROR_INVALID_REQUEST, "unauthorized.");
         }
 
-        // There is a weird compiler bug (feature?) that causes
-        // the params and result delete calls to match a DIFFERENT
-        // procedure that cfree, which is what is expected.
-        // This causes the wrong memory to be freed and I'm not sure
-        // how I made it this far without running into this issue...
-        // Work around for right now is to cast the rawptr to ^void.
         params: rawptr = null;
         result: rawptr = null;
-        defer if params != null do delete(cast(^void) params);
-        defer if result != null do delete(cast(^void) result);
+        defer if params != null do cfree(params);
+        defer if result != null do cfree(result);
 
         if !(request_obj["params"]->is_null()) {
             params = new(endpoint.param_type);
