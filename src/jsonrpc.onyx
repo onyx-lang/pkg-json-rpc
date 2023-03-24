@@ -334,7 +334,7 @@ populate_parameters :: (params: rawptr, param_type: type_expr, input: json.Value
 
         i := 0;
         for ^ member: s_info.members {
-            json.to_any(input[i], member.type, cast(^u8) params + member.offset);
+            json.to_any(input[i], member.type, cast([^] u8) params + member.offset);
             i += 1;
         }
 
