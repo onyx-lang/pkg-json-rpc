@@ -1,8 +1,9 @@
 #load "./lib/json/module"
 #load "./module"
 
-use core
-use json_rpc { JC :: Context, Method, Status, Notification }
+use core {package, *}
+use json
+use json_rpc { package, JC :: Context, Method, Status, Notification }
 
 Input :: struct {
     @json_rpc.Param_Description.{"Dummy description"}
@@ -43,7 +44,7 @@ main :: () {
     server := json_rpc.handler();
 
     server->set_metadata("example-server", "A simple example server with 1 method.", "0.0.1");
-    server->collect_methods(.[package main]);
+    server->collect_methods(.[#this_package]);
     server->enable_openrpc_discovery();
 
     server->set_output_callback(null, (_, msg) => {

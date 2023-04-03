@@ -2,8 +2,9 @@ package json_rpc
 
 // TODO: eventually delete things marked with :oldcode
 
-use core
-use runtime.info
+use json
+use core {package, *}
+use runtime.info {*}
 
 // Public structures
 

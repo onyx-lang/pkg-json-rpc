@@ -1,8 +1,9 @@
 package json_rpc
 
+use json
 use core {iter, array}
 use core.misc {any_as}
-use runtime.info
+use runtime.info {*}
 
 #inject Context {
     enable_openrpc_discovery :: (ctx: ^Context) {
