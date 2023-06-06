@@ -1,8 +1,7 @@
-#load "./lib/json/module"
 #load "./module"
 
 use core {package, *}
-use json
+use core.encoding.json
 use json_rpc { package, JC :: Context, Method, Status, Notification }
 
 Input :: struct {

@@ -2,7 +2,7 @@ package json_rpc
 
 // TODO: eventually delete things marked with :oldcode
 
-use json
+use core.encoding.json
 use core {package, *}
 use runtime.info {*}
 

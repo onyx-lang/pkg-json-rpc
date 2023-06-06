@@ -1,6 +1,6 @@
 package json_rpc
 
-use json
+use core.encoding.json
 use core {iter, array}
 use core.misc {any_as}
 use runtime.info {*}
@@ -60,7 +60,7 @@ openrpc_discover_handler :: (
                 for ^ member: s_info.members
                 {
                     desc := do {
-                        if tag := array.first(member.tags, #(it.type == Param_Description)); tag {
+                        if tag := array.first(member.tags, [](it.type == Param_Description)); tag {
                             return any_as(*tag, Param_Description).desc;
                         }
 
@@ -68,7 +68,7 @@ openrpc_discover_handler :: (
                     };
 
                     summary := do {
-                        if tag := array.first(member.tags, #(it.type == Param_Summary)); tag {
+                        if tag := array.first(member.tags, [](it.type == Param_Summary)); tag {
                             return any_as(*tag, Param_Summary).summary;
                         }
 
