@@ -1,0 +1,13 @@
+package {
+    name "json-rpc" 
+    author "Brendan Hansen" 
+    url "git://onyxlang.io/repo/json-rpc" 
+    description "A JSON-RPC server for Onyx" 
+    version "0.0.29" 
+}
+
+config {
+    dependency_source_path "./lib" 
+    dependency_binary_path "./bin" 
+}
+
