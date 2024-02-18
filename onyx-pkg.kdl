@@ -3,7 +3,7 @@ package {
     author "Brendan Hansen" 
     url "git://onyxlang.io/repo/json-rpc" 
     description "A JSON-RPC server for Onyx" 
-    version "0.0.30" 
+    version "0.0.31" 
 }
 
 config {

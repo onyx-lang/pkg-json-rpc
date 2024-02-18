@@ -169,7 +169,7 @@ handler :: () -> Context {
     collect_methods :: (hndl: ^Context, packages: [] package_id) {
         procs := get_procedures_with_tag(Method);
 
-        for ^ procs {
+        for &procs {
             if packages.count == 0 || array.contains(packages, it.pack) {
                 if hndl->method(it.tag.name, any.{^it.func, it.type}) {
                     endpoint := ^hndl.endpoint_map[it.tag.name];
@@ -182,7 +182,7 @@ handler :: () -> Context {
 
         notification_procs := get_procedures_with_tag(Notification);
 
-        for ^ notification_procs {
+        for &notification_procs {
             if packages.count == 0 || array.contains(packages, it.pack) {
                 if hndl->notification(it.tag.name, any.{^it.func, it.type}) {
                     endpoint := ^hndl.endpoint_map[it.tag.name];
@@ -334,7 +334,7 @@ populate_parameters :: (params: rawptr, param_type: type_expr, input: json.Value
         s_info := cast(^Type_Info_Struct) p_info;
 
         i := 0;
-        for ^ member: s_info.members {
+        for &member in s_info.members {
             json.to_any(input[i], member.type, cast([^] u8) params + member.offset);
             i += 1;
         }
