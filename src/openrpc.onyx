@@ -26,7 +26,7 @@ Param_Description :: struct { desc: str }
 #local
 openrpc_discover_handler :: (
     ctx: ^Context,
-    in: ^void,
+    input: ^void,
     out: ^OpenRPC_Spec)
 -> Status
 {
@@ -38,7 +38,7 @@ openrpc_discover_handler :: (
 
     // Populate the methods (The important part!)
     out.methods = make([] OpenRPC_Method, ctx.endpoint_map.entries.count);
-    for entry: iter.as_iter(^ctx.endpoint_map)
+    for entry in iter.as_iter(^ctx.endpoint_map)
             |> iter.enumerate()
     {
         endpoint := ^entry.value.value;
@@ -57,7 +57,7 @@ openrpc_discover_handler :: (
             if p_info.kind == .Struct
             {
                 s_info := cast(^Type_Info_Struct) p_info;
-                for ^ member: s_info.members
+                for &member in s_info.members
                 {
                     desc := do {
                         if tag := array.first(member.tags, [](it.type == Param_Description)); tag {
@@ -158,7 +158,7 @@ build_schema_for_type :: (type: type_expr) -> json.Value
         {
             out := json.empty_object();
             s_info := cast(^Type_Info_Struct) t_info;
-            for ^ member: s_info.members
+            for &member in s_info.members
             {
                 json.set(out, member.name, build_schema_for_type(member.type), dont_copy_key=true);
             }
