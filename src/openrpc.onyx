@@ -28,7 +28,6 @@ openrpc_discover_handler :: (
     ctx: ^Context,
     input: ^void,
     out: ^OpenRPC_Spec)
--> Status
 {
     // Fill out basic information
     // This should be :user-configurable
