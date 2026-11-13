@@ -63,11 +63,11 @@ Endpoint :: struct {
     param_type: type_expr;
     return_type: type_expr;
 
-    // (^Context, ^param_type, ^return_type) -> Status
-    method_handler: (^Context, rawptr, rawptr) -> Status;
+    // (&Context, &param_type, &return_type) -> Status
+    method_handler: (&Context, rawptr, rawptr) -> Status;
 
-    // (^Context, ^param_type) -> void
-    notification_handler: (^Context, rawptr) -> void;
+    // (&Context, &param_type) -> void
+    notification_handler: (&Context, rawptr) -> void;
 
     summary, description: str;
     protected := false;
@@ -85,244 +85,228 @@ handler :: () -> Context {
     return s;
 }
 
-#inject Context {
-    #doc """
-        Sets internal user data pointer that can be
-        used by method handlers for a variety of purposes.
-    """
-    set_userdata :: macro (hndl: ^Context, data: ^$T) {
-        h := hndl;
-        h.userdata = data;
-        h.userdata_type = T;
-    }
+/// Sets internal user data pointer that can be
+/// used by method handlers for a variety of purposes.
+Context.set_userdata :: macro (hndl: &Context, data: &$T) {
+    h := hndl;
+    h.userdata = data;
+    h.userdata_type = T;
+}
 
-    set_metadata :: (hndl: ^Context, title, description, version: str) {
-        hndl.title = title;
-        hndl.description = description;
-        hndl.version = version;
-    }
+Context.set_metadata :: (hndl: &Context, title, description, version: str) {
+    hndl.title = title;
+    hndl.description = description;
+    hndl.version = version;
+}
 
-    #doc """
-        Registers a method on the JSON-RPC Server.
-        The parameter and return types are inferred from types on the procedure.
-    """
-    method :: (hndl: ^Context, method_name: str, handler: any) -> bool {
-        handler_info := cast(^Type_Info_Function) get_type_info(handler.type);
-        if handler_info.kind != .Function do return false;
+/// Registers a method on the JSON-RPC Server.
+/// The parameter and return types are inferred from types on the procedure.
+Context.method :: (hndl: &Context, method_name: str, handler: any) -> bool {
+    handler_info := cast(&Type_Info_Function) get_type_info(handler.type);
+    if handler_info.kind != .Function do return false;
 
-        if handler_info.parameter_types.count != 3 do return false;
-        if handler_info.parameter_types[0] != ^Context do return false;
+    if handler_info.parameter_types.count != 3 do return false;
+    if handler_info.parameter_types[0] != &Context do return false;
 
-        param_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
-        if param_type_info.kind != .Pointer do return false;
+    param_type_info := cast(&Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
+    if param_type_info.kind != .Pointer do return false;
 
-        return_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.parameter_types[2]);
-        if return_type_info.kind != .Pointer do return false;
+    return_type_info := cast(&Type_Info_Pointer) get_type_info(handler_info.parameter_types[2]);
+    if return_type_info.kind != .Pointer do return false;
 
-        m := Endpoint.{
-            type = .Method,
-            method_name = method_name,
-            param_type  = param_type_info.to,
-            return_type = return_type_info.to,
-        };
+    m := Endpoint.{
+        type = .Method,
+        method_name = method_name,
+        param_type  = param_type_info.to,
+        return_type = return_type_info.to,
+    };
 
-        m.method_handler = *cast(^(^Context, rawptr, rawptr) -> Status) handler.data;
+    m.method_handler = *cast(&(&Context, rawptr, rawptr) -> Status) handler.data;
 
-        hndl.endpoint_map[method_name] = m;
+    hndl.endpoint_map[method_name] = m;
 
-        return true;
-    }
+    return true;
+}
 
-    #doc """
-        Registers a notification handler on the JSON-RPC Server.
-        The parameter type is inferred from type on the procedure.
-    """
-    notification :: (hndl: ^Context, method_name: str, handler: any) -> bool {
-        handler_info := cast(^Type_Info_Function) get_type_info(handler.type);
-        if handler_info.kind != .Function do return false;
+/// Registers a notification handler on the JSON-RPC Server.
+/// The parameter type is inferred from type on the procedure.
+Context.notification :: (hndl: &Context, method_name: str, handler: any) -> bool {
+    handler_info := cast(&Type_Info_Function) get_type_info(handler.type);
+    if handler_info.kind != .Function do return false;
 
-        if handler_info.parameter_types.count != 2 do return false;
-        if handler_info.parameter_types[0] != ^Context do return false;
+    if handler_info.parameter_types.count != 2 do return false;
+    if handler_info.parameter_types[0] != &Context do return false;
 
-        param_type_info := cast(^Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
-        if param_type_info.kind != .Pointer do return false;
+    param_type_info := cast(&Type_Info_Pointer) get_type_info(handler_info.parameter_types[1]);
+    if param_type_info.kind != .Pointer do return false;
 
-        m := Endpoint.{
-            type = .Notification,
-            method_name = method_name,
-            param_type  = param_type_info.to,
-            return_type = void
-        };
+    m := Endpoint.{
+        type = .Notification,
+        method_name = method_name,
+        param_type  = param_type_info.to,
+        return_type = void
+    };
 
-        m.notification_handler = *cast(^(^Context, rawptr) -> void) handler.data;
+    m.notification_handler = *cast(&(&Context, rawptr) -> void) handler.data;
 
-        hndl.endpoint_map[method_name] = m;
+    hndl.endpoint_map[method_name] = m;
 
-        return true;
-    }
+    return true;
+}
 
-    #doc """
-        Automatically registers all methods defined in the set of packages
-        listed in the arguments. If no packages are listed, all methods from all
-        packages are registered.
-    """
-    collect_methods :: (hndl: ^Context, packages: [] package_id) {
-        procs := get_procedures_with_tag(Method);
+/// Automatically registers all methods defined in the set of packages
+/// listed in the arguments. If no packages are listed, all methods from all
+/// packages are registered.
+Context.collect_methods :: (hndl: &Context, packages: [] package_id) {
+    procs := get_procedures_with_tag(Method);
 
-        for &procs {
-            if packages.count == 0 || array.contains(packages, it.pack) {
-                if hndl->method(it.tag.name, any.{^it.func, it.type}) {
-                    endpoint := ^hndl.endpoint_map[it.tag.name];
-                    endpoint.summary = it.tag.summary;
-                    endpoint.description = it.tag.description;
-                    endpoint.protected = it.tag.protected;
-                }
-            }
-        }
-
-        notification_procs := get_procedures_with_tag(Notification);
-
-        for &notification_procs {
-            if packages.count == 0 || array.contains(packages, it.pack) {
-                if hndl->notification(it.tag.name, any.{^it.func, it.type}) {
-                    endpoint := ^hndl.endpoint_map[it.tag.name];
-                    endpoint.summary = it.tag.summary;
-                    endpoint.description = it.tag.description;
-                }
+    for &procs {
+        if packages.count == 0 || Array.contains(packages, it.pack) {
+            if hndl->method(it.tag.name, any.{&it.func, it.type}) {
+                endpoint := &hndl.endpoint_map[it.tag.name];
+                endpoint.summary = it.tag.summary;
+                endpoint.description = it.tag.description;
+                endpoint.protected = it.tag.protected;
             }
         }
     }
 
-    #doc """
-        TODO Document
-    """
-    set_output_callback :: (hndl: ^Context, userdata: rawptr, callback: (rawptr, str) -> void) {
-        hndl.output_callback_userdata = userdata;
-        hndl.output_callback = callback;
+    notification_procs := get_procedures_with_tag(Notification);
+
+    for &notification_procs {
+        if packages.count == 0 || Array.contains(packages, it.pack) {
+            if hndl->notification(it.tag.name, any.{&it.func, it.type}) {
+                endpoint := &hndl.endpoint_map[it.tag.name];
+                endpoint.summary = it.tag.summary;
+                endpoint.description = it.tag.description;
+            }
+        }
+    }
+}
+
+Context.set_output_callback :: (hndl: &Context, userdata: rawptr, callback: (rawptr, str) -> void) {
+    hndl.output_callback_userdata = userdata;
+    hndl.output_callback = callback;
+}
+
+/// Handles a JSON-RPC request. This is done SYNCHONOUSLY!
+Context.handle :: (hndl: &Context, request_string: str, protected := false) -> bool {
+    request := json.decode(request_string) ?? [e] {
+        pos := e.pos;
+
+        id: i32 = -1
+        respond_with_error(ERROR_PARSE_ERROR, tprintf("Invalid JSON at line {}, column {}", pos.line, pos.column));
+    }
+    defer json.free(request);
+
+    request_obj := request.root;
+    method := request_obj["method"]->as_str();
+    id     := request_obj["id"]->as_int();
+
+    if request_obj["id"]->is_null() {
+        id = -1;
     }
 
-    #doc """
-        Handles a JSON-RPC request. This is done SYNCHONOUSLY!
-    """
-    handle :: (hndl: ^Context, request_string: str, protected := false) -> bool {
-        request, json_err := json.decode_with_error(request_string);
-        defer json.free(request);
+    if request_obj["jsonrpc"]->as_str() != "2.0" {
+        respond_with_error(ERROR_INVALID_REQUEST, "'jsonrpc' key not found or not equal to '2.0'.");
+    }
 
-        request_obj := request.root;
-        method := request_obj["method"]->as_str();
-        id     := request_obj["id"]->as_int();
+    if str.empty(method) {
+        respond_with_error(ERROR_INVALID_REQUEST, "'method' not specified.");
+    }
 
-        if json_err->has_error() {
-            pos := json_err->position();
+    endpoint := &hndl.endpoint_map[method];
+    if endpoint == null {
+        respond_with_error(ERROR_METHOD_NOT_FOUND, "method not found.");
+    }
 
-            respond_with_error(ERROR_PARSE_ERROR, tprintf("{} at line {}, column {}", json_err->message(), pos.line, pos.column));
-        }
+    if endpoint.protected && !protected {
+        respond_with_error(ERROR_INVALID_REQUEST, "unauthorized.");
+    }
 
-        if request_obj["id"]->is_null() {
-            id = -1;
-        }
+    params: rawptr = null;
+    result: rawptr = null;
+    defer if params != null do cfree(params);
+    defer if result != null do cfree(result);
 
-        if request_obj["jsonrpc"]->as_str() != "2.0" {
-            respond_with_error(ERROR_INVALID_REQUEST, "'jsonrpc' key not found or not equal to '2.0'.");
-        }
+    if !(request_obj["params"]->is_null()) {
+        params = new(endpoint.param_type);
+        populate_parameters(params, endpoint.param_type, request_obj["params"]);
+    }
 
-        if string.empty(method) {
-            respond_with_error(ERROR_INVALID_REQUEST, "'method' not specified.");
-        }
+    switch endpoint.type {
+        case .Method {
+            result = new(endpoint.return_type);
 
-        endpoint := ^hndl.endpoint_map[method];
-        if endpoint == null {
-            respond_with_error(ERROR_METHOD_NOT_FOUND, "method not found.");
-        }
+            status := endpoint.method_handler(hndl, params, result);
 
-        if endpoint.protected && !protected {
-            respond_with_error(ERROR_INVALID_REQUEST, "unauthorized.");
-        }
-
-        params: rawptr = null;
-        result: rawptr = null;
-        defer if params != null do cfree(params);
-        defer if result != null do cfree(result);
-
-        if !(request_obj["params"]->is_null()) {
-            params = new(endpoint.param_type);
-            populate_parameters(params, endpoint.param_type, request_obj["params"]);
-        }
-
-        switch endpoint.type {
-            case .Method {
-                result = new(endpoint.return_type);
-
-                status := endpoint.method_handler(hndl, params, result);
-
-                // If no id was given, no response should be generated.
-                if id == -1 {
-                    return true;
-                }
-
-                json_result := json.null_value();
-                if endpoint.return_type != void && status == .Success {
-                    json_result = json.from_any(endpoint.return_type, result);
-                }
-
-                if status != .Error {
-                    message_json := json.from_any(^.{
-                        jsonrpc = "2.0",
-                        result = json_result,
-                        id = id
-                    });
-                    defer json.free(message_json, context.allocator);
-
-                    message, asdf := json.encode_string(message_json);
-                    defer delete(^message);
-
-                    hndl.output_callback(hndl.output_callback_userdata, message);
-
-                } else {
-                    respond_with_error(ERROR_INTERNAL_ERROR, "error processing request");
-                }
-
+            // If no id was given, no response should be generated.
+            if id == -1 {
                 return true;
             }
 
-            case .Notification {
-                endpoint.notification_handler(hndl, params);
-                return true;
+            json_result := json.null_value();
+            if endpoint.return_type != void && status == .Success {
+                json_result = json.from_any(endpoint.return_type, result);
             }
-        }
 
-        return false;
-
-        respond_with_error :: macro (code: i32, message: str) {
-            if id != -1 {
-                result_json := json.from_any(^.{
+            if status != .Error {
+                message_json := json.from_any(&.{
                     jsonrpc = "2.0",
-                    error = Error_Status.{ code = code, message = message },
+                    result = json_result,
                     id = id
                 });
-                defer json.free(result_json, context.allocator);
+                defer json.free(message_json, context.allocator);
 
-                result, _ := json.encode_string(result_json);
-                defer delete(^result);
+                if json.encode_string(message_json).Ok as message {
+                    hndl.output_callback(hndl.output_callback_userdata, message);
+                    delete(&message);
+                }
 
-                hndl.output_callback(hndl.output_callback_userdata, result);
+            } else {
+                respond_with_error(ERROR_INTERNAL_ERROR, "error processing request");
             }
-            return false;
+
+            return true;
+        }
+
+        case .Notification {
+            endpoint.notification_handler(hndl, params);
+            return true;
         }
     }
 
-    send_notification :: (hndl: ^Context, name: str, params: ^$T) {
-        message_json := json.from_any(^.{
-            jsonrpc = "2.0",
-            method = name,
-            params = *params
-        });
-        defer json.free(message_json, context.allocator);
+    return false;
 
-        message, _ := json.encode_string(message_json);
-        defer delete(^message);
+    respond_with_error :: macro (code: i32, message: str) {
+        if id != -1 {
+            result_json := json.from_any(&.{
+                jsonrpc = "2.0",
+                error = Error_Status.{ code = code, message = message },
+                id = id
+            });
+            defer json.free(result_json, context.allocator);
 
+            if json.encode_string(result_json).Ok as result {
+                hndl.output_callback(hndl.output_callback_userdata, result);
+                delete(&result);
+            }
+        }
+        return #from_proc false;
+    }
+}
+
+Context.send_notification :: (hndl: &Context, name: str, params: &$T) {
+    message_json := json.from_any(&.{
+        jsonrpc = "2.0",
+        method = name,
+        params = *params
+    });
+    defer json.free(message_json, context.allocator);
+
+    if json.encode_string(message_json).Ok as message {
         hndl.output_callback(hndl.output_callback_userdata, message);
+        delete(&message);
     }
 }
 
@@ -331,11 +315,11 @@ populate_parameters :: (params: rawptr, param_type: type_expr, input: json.Value
     p_info := get_type_info(param_type);
 
     if input->type() == .Array && p_info.kind == .Struct {
-        s_info := cast(^Type_Info_Struct) p_info;
+        s_info := cast(&Type_Info_Struct) p_info;
 
         i := 0;
         for &member in s_info.members {
-            json.to_any(input[i], member.type, cast([^] u8) params + member.offset);
+            json.to_any(input[i], member.type, cast([&] u8) params + member.offset);
             i += 1;
         }
 

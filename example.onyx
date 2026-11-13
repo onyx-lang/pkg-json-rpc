@@ -21,7 +21,7 @@ Output :: struct {
     summary = "A simple test method.",
     description = "A long description of what is said before"
 }
-(_: ^JC, input: ^Input, output: ^Output) -> Status {
+(_: &JC, input: &Input, output: &Output) -> Status {
     printf("{*p}\n", input);
     
     *output = .{
@@ -35,7 +35,7 @@ Output :: struct {
 @Notification.{
     "notify"
 }
-(_: ^JC, test: ^i32) {
+(_: &JC, test: &i32) {
     printf("Working notification: {*}\n", test);
 }
 
@@ -70,14 +70,14 @@ main :: () {
         "params": [1234],
     }""");
 
-    server->send_notification("test", ^.{ asdf=1234 });
+    server->send_notification("test", &.{ asdf=1234 });
     
-    // server->handle("""{
-    //     "jsonrpc": "2.0",
-    //     "method": "rpc.discover",
-    //     "params": [],
-    //     "id": 1
-    // }""", ^core.stdio.print_writer);
+    server->handle("""{
+        "jsonrpc": "2.0",
+        "method": "rpc.discover",
+        "params": [],
+        "id": 1
+    }""");
 
 }
 
